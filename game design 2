@@ -1,0 +1,331 @@
+def welcome():
+    """Display the story introduction for the player."""
+    print(
+        "You have been enchanted as a mermaid by the villain wanting "
+        "you to die in the sea. You must swim through a maze trying to "
+        "figure out how to escape from the enchantment placed upon you.\n"
+        "Your ally is waiting for you past the last gate. "
+        "Your foe is blocking this gate, stopping you from escaping "
+        "with the ingredients needed to cancel the enchantment."
+    )
+
+
+def show_instructions():
+    """Display the command list for the player."""
+    print(
+        "\nINSTRUCTIONS\n"
+        "To move about, type: go North, go South, go East, go West\n"
+        "To pick up an item, type: get item\n"
+        "To get the current game status, type: status\n"
+        "To show the instructions again, type: instructions\n"
+        "To quit the game, type: quit or exit\n"
+    )
+
+
+import random
+
+
+def create_rooms():
+    """
+    Create a map automatically.
+
+    This version keeps the story structure:
+    - Entrance is the start
+    - Villain and Ally are placed later
+    - the other rooms are generated randomly
+    - items are scattered into normal rooms
+    """
+    rooms = generate_map(room_count=10)
+    rooms = assign_special_rooms(rooms)
+    rooms = assign_items(rooms)
+    return rooms
+
+
+def generate_map(room_count=10):
+    """
+    Generate a connected set of rooms using grid coordinates.
+
+    We start with Entrance, then grow the map one room at a time
+    by attaching new rooms next to rooms that already exist.
+    """
+    directions = {
+        "North": (0, 1),
+        "South": (0, -1),
+        "East": (1, 0),
+        "West": (-1, 0),
+    }
+
+    # These are names for the random middle rooms.
+    room_names = [
+        "Coral", "Kelp", "Clams", "Reef", "Abyss", "Cave",
+        "Sandbar", "Trench", "Lagoon", "Grotto", "Seagrass", "Ruins"
+    ]
+
+    # Place the first room.
+    placed_rooms = {(0, 0): "Entrance"}
+    open_positions = [(0, 0)]
+    used_names = {"Entrance"}
+
+    while len(placed_rooms) < room_count:
+        # Pick an already-placed room to grow from.
+        current_pos = random.choice(open_positions)
+        direction, (dx, dy) = random.choice(list(directions.items()))
+        new_pos = (current_pos[0] + dx, current_pos[1] + dy)
+
+        # Only place a new room if that coordinate is empty.
+        if new_pos not in placed_rooms:
+            # Choose a room name we have not used yet.
+            available_names = [name for name in room_names if name not in used_names]
+            if not available_names:
+                new_name = f"Room{len(placed_rooms)}"
+            else:
+                new_name = random.choice(available_names)
+
+            placed_rooms[new_pos] = new_name
+            open_positions.append(new_pos)
+            used_names.add(new_name)
+
+    # Build the actual room dictionary.
+    rooms = {}
+    for position, room_name in placed_rooms.items():
+        rooms[room_name] = {}
+
+    # Connect rooms that are next to each other.
+    for position, room_name in placed_rooms.items():
+        x, y = position
+        for direction, (dx, dy) in directions.items():
+            neighbor_pos = (x + dx, y + dy)
+            if neighbor_pos in placed_rooms:
+                neighbor_name = placed_rooms[neighbor_pos]
+                rooms[room_name][direction] = neighbor_name
+
+    return rooms
+
+
+def rename_room(rooms, old_name, new_name):
+    """
+    Rename a room and also fix every path that points to it.
+    """
+    rooms[new_name] = rooms.pop(old_name)
+
+    for room_data in rooms.values():
+        for direction, destination in list(room_data.items()):
+            if destination == old_name:
+                room_data[direction] = new_name
+
+
+
+def assign_special_rooms(rooms):
+    """
+    Pick random rooms to become the Villain and Ally rooms.
+
+    We avoid using Entrance for either one.
+    """
+    candidates = [room for room in rooms if room != "Entrance"]
+
+    villain_old = random.choice(candidates)
+    candidates.remove(villain_old)
+
+    ally_old = random.choice(candidates)
+
+    rename_room(rooms, villain_old, "Villain")
+    rename_room(rooms, ally_old, "Ally")
+
+    return rooms
+
+
+
+def assign_items(rooms):
+    """
+    Scatter important items into normal rooms.
+
+    We do not place items in Entrance, Villain, or Ally.
+    """
+    items = [
+        "Purple Coral",
+        "Kelp Piece",
+        "Black Pearl",
+        "Starfish",
+        "Pieces of Stone",
+        "Knife",
+    ]
+
+    valid_rooms = [
+        room for room in rooms
+        if room not in ["Entrance", "Villain", "Ally"]
+    ]
+
+    random.shuffle(valid_rooms)
+
+    for item, room_name in zip(items, valid_rooms):
+        rooms[room_name]["item"] = item
+
+    return rooms
+
+
+def show_status(current_room, rooms, inventory):
+    """Show the player's current room, inventory, and visible item."""
+    print("\n---------------------------")
+    print(f"You are in the {current_room}")
+    print(f"Inventory: {inventory}")
+
+    # If the room still has an item, show it to the player.
+    if "item" in rooms[current_room]:
+        print(f"You see a {rooms[current_room]['item']}")
+
+    print("---------------------------")
+
+
+def move_player(current_room, direction, rooms):
+    """
+    Move the player to a new room if that direction exists.
+
+    Returns the updated room name.
+    If the move is invalid, returns the same room.
+    """
+    if direction in rooms[current_room]:
+        return rooms[current_room][direction]
+
+    print("You are unable to go that way. Go another way.")
+    return current_room
+
+
+def get_item(current_room, rooms, inventory):
+    """
+    Let the player pick up the item in the current room.
+
+    The item is added to inventory and removed from the room.
+    """
+    if "item" in rooms[current_room]:
+        item = rooms[current_room]["item"]
+        inventory.append(item)
+        del rooms[current_room]["item"]
+        print(f"You picked up {item}.")
+    else:
+        print("There is no item here.")
+
+
+def has_required_items(inventory, needed_items):
+    """Return True if every required item is in the inventory."""
+    return all(item in inventory for item in needed_items)
+
+
+def handle_villain(inventory):
+    """
+    Handle what happens when the player reaches the villain.
+
+    Returns True if the player survives this encounter.
+    Returns False if the game should end.
+    """
+    villain_items = ["Knife", "Pieces of Stone"]
+
+    print(
+        "Watch out! You found the villain!\n"
+        "You need the Knife and Pieces of Stone to get past."
+    )
+
+    if has_required_items(inventory, villain_items):
+        print("You use the Knife and Pieces of Stone to get past the villain!")
+        return True
+
+    print("You are not ready to face the villain yet.")
+    print("Game Over.")
+    return False
+
+
+def handle_ally(inventory):
+    """
+    Handle what happens when the player reaches the ally.
+
+    Returns True because reaching the ally ends the game either way.
+    """
+    potion_items = ["Purple Coral", "Starfish", "Black Pearl", "Kelp Piece"]
+
+    if has_required_items(inventory, potion_items):
+        print(
+            "Congratulations! Your ally helps disenchant your mermaid tail\n"
+            "and regrow your human legs. You escaped!"
+        )
+    else:
+        print(
+            "You reached your ally, but you do not have all the potion ingredients."
+        )
+        print("You still need Purple Coral, Starfish, Black Pearl, and Kelp Piece.")
+
+    return True
+
+
+def get_player_command():
+    """Ask the player for a command and clean the text."""
+    return input("\nEnter your move: ").strip().lower()
+
+
+def handle_command(command, current_room, rooms, inventory):
+    """
+    Process one player command.
+
+    Returns:
+    - updated current_room
+    - keep_playing (True/False)
+    """
+    if command in ["quit", "exit"]:
+        print("Thanks for playing!")
+        return current_room, False
+
+    if command == "instructions":
+        show_instructions()
+        return current_room, True
+
+    if command == "status":
+        show_status(current_room, rooms, inventory)
+        return current_room, True
+
+    if command == "get item":
+        get_item(current_room, rooms, inventory)
+        return current_room, True
+
+    if command.startswith("go "):
+        # Grab the word after "go " and capitalize it to match room directions.
+        direction = command.split(" ", 1)[1].capitalize()
+        current_room = move_player(current_room, direction, rooms)
+        return current_room, True
+
+    print("Invalid command.")
+    return current_room, True
+
+
+def main():
+    """Run the game loop."""
+    rooms = create_rooms()
+    current_room = "Entrance"
+    inventory = []
+
+    print("What is your name?")
+    player_name = input("> ").strip()
+
+    print(f"\nWelcome, {player_name}!")
+    welcome()
+    show_instructions()
+
+    keep_playing = True
+
+    while keep_playing:
+        show_status(current_room, rooms, inventory)
+
+        # Special room checks happen before the player enters another command.
+        if current_room == "Villain":
+            keep_playing = handle_villain(inventory)
+            if not keep_playing:
+                break
+
+        elif current_room == "Ally":
+            handle_ally(inventory)
+            break
+
+        command = get_player_command()
+        current_room, keep_playing = handle_command(command, current_room, rooms, inventory)
+
+
+# This makes sure the game only starts when this file is run directly.
+if __name__ == "__main__":
+    main()
